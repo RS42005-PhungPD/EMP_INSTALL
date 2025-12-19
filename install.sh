@@ -455,10 +455,10 @@ EOF
 
 docker login $STORE_URL -u $STORE_USERNAME -p $STORE_PASSWORD
 
-if command -v docker-compose > /dev/null 2>&1; then
-    docker-compose up -d
-elif docker compose version >/dev/null 2>&1; then
+if docker compose version >/dev/null 2>&1; then
     docker compose up -d
+elif docker-compose version >/dev/null 2>&1; then
+    docker-compose up -d
 else
     docker run -d \
     --name system_info \
