@@ -454,9 +454,9 @@ services:
 EOF
 
 docker login $STORE_URL -u $STORE_USERNAME -p $STORE_PASSWORD
-docker-compose up -d
+
 if command -v docker-compose > /dev/null 2>&1; then
-    
+    docker-compose up -d
 elif docker compose version >/dev/null 2>&1; then
     docker compose up -d
 else
