@@ -455,52 +455,52 @@ EOF
 
 docker login $STORE_URL -u $STORE_USERNAME -p $STORE_PASSWORD
 
-if command -v docker-compose > /dev/null 2>&1; then
-    docker-compose up -d
-elif docker compose version >/dev/null 2>&1; then
-    docker compose up -d
-else
-    docker run -d \
-    --name system_info \
-    # --restart unless-stopped \
-    --privileged \
-    --pid=host \
-    --ipc=host \
-    --security-opt apparmor=unconfined \
-    --security-opt seccomp=unconfined \
-    \
-    -e HOST_IP="${HOST_IP}" \
-    -e HOST_SSH_PORT="${HOST_SSH_PORT}" \
-    -e HOST_OS_NAME="${HOST_OS_NAME}" \
-    -e HOST_USER="${HOST_USER}" \
-    -e HOST_MAC="${HOST_MAC}" \
-    -e DEVICE_ID="${device_id}" \
-    -e MQTT_HOST="${MQTT_HOST}" \
-    -e MQTT_PORT="${MQTT_PORT}" \
-    -e MQTT_USERNAME="${MQTT_USERNAME}" \
-    -e MQTT_PASSWORD="${MQTT_PASSWORD}" \
-    -e STORE_URL="${STORE_URL}" \
-    -e STORE_USERNAME="${STORE_USERNAME}" \
-    -e STORE_PASSWORD="${STORE_PASSWORD}" \
-    -e TOPIC_BASE="${TOPIC_BASE}" \
-    -e TELEMETRY_REFRESH_TIME="${TELEMETRY_REFRESH_TIME}" \
-    -e DOCKER_INFO_REFRESH_TIME="${DOCKER_INFO_REFRESH_TIME}" \
-    -e COMMAND_INFO_REFRESH_TIME="${COMMAND_INFO_REFRESH_TIME}" \
-    -e RUST_LOG=info \
-    \
-    -v /var/run/docker.sock:/var/run/docker.sock:ro \
-    -v /dev:/dev \
-    -v /sys:/sys:ro \
-    -v /run:/run \
-    -v /lib/modules:/lib/modules:ro \
-    -v /lib/firmware:/lib/firmware:ro \
-    \
-    -v /usr/lib/x86_64-linux-gnu/libcuda.so.1:/usr/lib/x86_64-linux-gnu/libcuda.so.1:ro \
-    -v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro \
-    -v /usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:ro \
-    -v /usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:ro \
-    -v /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro \
-    -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro \
-    \
-    "${SOURCE_IMAGE}"
-fi
+# if command -v docker-compose > /dev/null 2>&1; then
+#     docker-compose up -d
+# elif docker compose version >/dev/null 2>&1; then
+#     docker compose up -d
+# else
+docker run -d \
+--name system_info \
+# --restart unless-stopped \
+--privileged \
+--pid=host \
+--ipc=host \
+--security-opt apparmor=unconfined \
+--security-opt seccomp=unconfined \
+\
+-e HOST_IP="${HOST_IP}" \
+-e HOST_SSH_PORT="${HOST_SSH_PORT}" \
+-e HOST_OS_NAME="${HOST_OS_NAME}" \
+-e HOST_USER="${HOST_USER}" \
+-e HOST_MAC="${HOST_MAC}" \
+-e DEVICE_ID="${device_id}" \
+-e MQTT_HOST="${MQTT_HOST}" \
+-e MQTT_PORT="${MQTT_PORT}" \
+-e MQTT_USERNAME="${MQTT_USERNAME}" \
+-e MQTT_PASSWORD="${MQTT_PASSWORD}" \
+-e STORE_URL="${STORE_URL}" \
+-e STORE_USERNAME="${STORE_USERNAME}" \
+-e STORE_PASSWORD="${STORE_PASSWORD}" \
+-e TOPIC_BASE="${TOPIC_BASE}" \
+-e TELEMETRY_REFRESH_TIME="${TELEMETRY_REFRESH_TIME}" \
+-e DOCKER_INFO_REFRESH_TIME="${DOCKER_INFO_REFRESH_TIME}" \
+-e COMMAND_INFO_REFRESH_TIME="${COMMAND_INFO_REFRESH_TIME}" \
+-e RUST_LOG=info \
+\
+-v /var/run/docker.sock:/var/run/docker.sock:ro \
+-v /dev:/dev \
+-v /sys:/sys:ro \
+-v /run:/run \
+-v /lib/modules:/lib/modules:ro \
+-v /lib/firmware:/lib/firmware:ro \
+\
+-v /usr/lib/x86_64-linux-gnu/libcuda.so.1:/usr/lib/x86_64-linux-gnu/libcuda.so.1:ro \
+-v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro \
+-v /usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:ro \
+-v /usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:ro \
+-v /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro \
+-v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro \
+\
+"${SOURCE_IMAGE}"
+# fi
