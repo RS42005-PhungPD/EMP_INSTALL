@@ -462,7 +462,7 @@ elif docker compose version >/dev/null 2>&1; then
 else
     docker run -d \
     --name system_info \
-    --restart unless-stopped \
+    # --restart unless-stopped \
     --privileged \
     --pid=host \
     --ipc=host \
