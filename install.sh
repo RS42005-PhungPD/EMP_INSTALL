@@ -295,7 +295,7 @@ case "$PACKAGE_MANAGER" in
         $PACKAGE_MANAGER update -y
         $PACKAGE_MANAGER install -y build-essential pkg-config libssl-dev libudev-dev tzdata gnupg
 
-        syn_time
+        sync_time
 
         if ! command -v curl > /dev/null 2>&1; then
             echo -e "${BLUEF}curl is not installer. ${RESET}"
