@@ -49,48 +49,33 @@ systemd_works() {
 sync_time() {
     echo "[INFO] Syncing system time..."
 
-    # Detect container
-    if grep -qaE 'docker|containerd|kubepods' /proc/1/cgroup 2>/dev/null; then
-        echo "[INFO] Running inside container → skip time sync (use host time)"
+    # Container / restricted env → skip
+    if grep -qaE 'docker|containerd|kubepods|lxc' /proc/1/cgroup 2>/dev/null; then
+        echo "[INFO] Time sync skipped (container / restricted environment)"
         return 0
     fi
 
-    # systemd-based system
-    if command -v timedatectl >/dev/null 2>&1; then
-        echo "[INFO] Using systemd-timesyncd"
-        timedatectl set-ntp true
-        systemctl enable systemd-timesyncd >/dev/null 2>&1 || true
-        systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
-        return 0
+    # systemd present & running
+    if command -v timedatectl >/dev/null 2>&1 && ps -p 1 -o comm= | grep -q systemd; then
+        if timedatectl show -p CanNTP --value 2>/dev/null | grep -q yes; then
+            echo "[INFO] Enabling systemd-timesyncd"
+            timedatectl set-ntp true
+            return 0
+        else
+            echo "[WARN] systemd present but NTP not supported"
+        fi
     fi
 
-    # Fallback: ntpdate (non-systemd)
+    # Fallback ntpdate
     if command -v ntpdate >/dev/null 2>&1; then
-        echo "[INFO] Using ntpdate"
-        ntpdate pool.ntp.org
+        echo "[INFO] Using ntpdate fallback"
+        ntpdate -b pool.ntp.org
         return 0
     fi
 
-    # Install ntpdate if possible
-    case "$PACKAGE_MANAGER" in
-        apt)
-            apt update -y
-            apt install -y ntpdate
-            ntpdate pool.ntp.org
-            ;;
-        yum|dnf)
-            $PACKAGE_MANAGER install -y ntpdate
-            ntpdate pool.ntp.org
-            ;;
-        apk)
-            apk add --no-cache ntpdate
-            ntpdate pool.ntp.org
-            ;;
-        *)
-            echo "[WARN] No supported package manager for time sync"
-            ;;
-    esac
+    echo "[WARN] No supported time sync method available"
 }
+
 
 
 
