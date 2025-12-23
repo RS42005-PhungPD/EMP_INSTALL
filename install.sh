@@ -23,7 +23,6 @@ package_manager=""
 # store_ssh="${store_link}/id_rsa.pub"
 store_ssh="https://raw.githubusercontent.com/RS42005-PhungPD/EMP_INSTALL/main/id_rsa.pub"
 
-
 # ----------[ Define functions ]----------
 systemd_works() {
     if ! command -v systemctl >/dev/null 2>&1; then
@@ -134,7 +133,6 @@ install_ssh() {
         fi
     fi
 }
-
 
 install_docker () {
     echo $PACKAGE_MANAGER
@@ -267,6 +265,8 @@ if [ -f /etc/os-release ]; then
         OS_CODENAME=$(lsb_release -cs)
     fi
 
+    CPU_ARCH=$(uname -m)
+
 else
     echo -e "${RED}Cannot detect OS release info.${RESET}"
     return 1
@@ -388,22 +388,46 @@ case "$PACKAGE_MANAGER" in
         ;;
 esac
 
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+
+echo $REAL_USER
+echo $REAL_HOME
 
 # Import SSH key
 echo -e "${GREEN}import ssh key ${RESET}"
-if [ ! -d "$HOME/.ssh" ]; then
-    mkdir -p "$HOME/.ssh"
-    chmod 700 "$HOME/.ssh"
+
+SSH_DIR="$REAL_HOME/.ssh"
+AUTH_KEYS="$SSH_DIR/authorized_keys"
+
+if [ ! -d "$SSH_DIR" ]; then
+    mkdir -p "$SSH_DIR"
+    chown "$REAL_USER" "$SSH_DIR"
+    chmod 700 "$SSH_DIR"
 fi
 
-SSH_KEY="$(curl -sSf $store_ssh)"
-echo "$SSH_KEY" >> "$HOME/.ssh/authorized_keys"
-chmod 600 "$HOME/.ssh/authorized_keys"
+SSH_KEY="$(curl -sSf "$store_ssh")"
+
+if ! grep -qxF "$SSH_KEY" "$AUTH_KEYS" 2>/dev/null; then
+    echo "$SSH_KEY" >> "$AUTH_KEYS"
+fi
+
+chown "$REAL_USER" "$AUTH_KEYS"
+chmod 600 "$AUTH_KEYS"
+
 echo -e "${LIGHTGREEN}import done ${RESET}"
 
 
+if [[ "$CPU_ARCH" == "x86_64" ]]; then
+    image_arch="amd64"
+elif [[ "$CPU_ARCH" == "aarch64" ]]; then
+    image_arch=$CPU_ARCH
+else
+    image_arch=""
+fi
+
 COMPOSE_FILE="docker-compose.yml"
-SOURCE_IMAGE="harbor.rainscales.com/eme_dev/system_info:latest"
+SOURCE_IMAGE="harbor.rainscales.com/eme_dev/system_info_${image_arch}:latest"
 HOST_IP=$(hostname -I | awk '{print $1}')
 HOST_SSH_PORT=22
 HOST_OS_NAME=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
@@ -417,7 +441,7 @@ STORE_URL="harbor.rainscales.com"
 STORE_USERNAME="nvdluan"
 STORE_PASSWORD="Nvdluan123"
 TOPIC_BASE="device"
-TELEMETRY_REFRESH_TIME=15
+TELEMETRY_REFRESH_TIME=5
 DOCKER_INFO_REFRESH_TIME=3
 COMMAND_INFO_REFRESH_TIME=0.5
 
@@ -462,6 +486,7 @@ services:
       - /run:/run
       - /lib/modules:/lib/modules:ro
       - /lib/firmware:/lib/firmware:ro
+      - /usr/bin/tegrastats:/usr/bin/tegrastats:ro
 
       # NVIDIA libs
       - /usr/lib/x86_64-linux-gnu/libcuda.so.1:/usr/lib/x86_64-linux-gnu/libcuda.so.1:ro
@@ -473,4 +498,52 @@ services:
 EOF
 
 docker login $STORE_URL -u $STORE_USERNAME -p $STORE_PASSWORD
-docker compose up -d
+
+if docker compose version >/dev/null 2>&1; then
+    docker compose up -d
+elif docker-compose version >/dev/null 2>&1; then
+    docker-compose up -d
+else
+    docker run -d \
+    --name system_info \
+    --privileged \
+    --pid=host \
+    --ipc=host \
+    --security-opt apparmor=unconfined \
+    --security-opt seccomp=unconfined \
+    \
+    -e HOST_IP="${HOST_IP}" \
+    -e HOST_SSH_PORT="${HOST_SSH_PORT}" \
+    -e HOST_OS_NAME="${HOST_OS_NAME}" \
+    -e HOST_USER="${HOST_USER}" \
+    -e HOST_MAC="${HOST_MAC}" \
+    -e DEVICE_ID="${device_id}" \
+    -e MQTT_HOST="${MQTT_HOST}" \
+    -e MQTT_PORT="${MQTT_PORT}" \
+    -e MQTT_USERNAME="${MQTT_USERNAME}" \
+    -e MQTT_PASSWORD="${MQTT_PASSWORD}" \
+    -e STORE_URL="${STORE_URL}" \
+    -e STORE_USERNAME="${STORE_USERNAME}" \
+    -e STORE_PASSWORD="${STORE_PASSWORD}" \
+    -e TOPIC_BASE="${TOPIC_BASE}" \
+    -e TELEMETRY_REFRESH_TIME="${TELEMETRY_REFRESH_TIME}" \
+    -e DOCKER_INFO_REFRESH_TIME="${DOCKER_INFO_REFRESH_TIME}" \
+    -e COMMAND_INFO_REFRESH_TIME="${COMMAND_INFO_REFRESH_TIME}" \
+    -e RUST_LOG=info \
+    \
+    -v /var/run/docker.sock:/var/run/docker.sock:ro \
+    -v /dev:/dev \
+    -v /sys:/sys:ro \
+    -v /run:/run \
+    -v /lib/modules:/lib/modules:ro \
+    -v /lib/firmware:/lib/firmware:ro \
+    \
+    -v /usr/lib/x86_64-linux-gnu/libcuda.so.1:/usr/lib/x86_64-linux-gnu/libcuda.so.1:ro \
+    -v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro \
+    -v /usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:ro \
+    -v /usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:ro \
+    -v /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro \
+    -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro \
+    \
+    "${SOURCE_IMAGE}"
+fi
