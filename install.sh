@@ -49,32 +49,54 @@ systemd_works() {
 sync_time() {
     echo "[INFO] Syncing system time..."
 
-    # Container / restricted env → skip
+    # 1. Detect container / restricted env
     if grep -qaE 'docker|containerd|kubepods|lxc' /proc/1/cgroup 2>/dev/null; then
-        echo "[INFO] Time sync skipped (container / restricted environment)"
+        echo "[INFO] Container detected → skip time sync (use host time)"
         return 0
     fi
 
-    # systemd present & running
-    if command -v timedatectl >/dev/null 2>&1 && ps -p 1 -o comm= | grep -q systemd; then
-        if timedatectl show -p CanNTP --value 2>/dev/null | grep -q yes; then
-            echo "[INFO] Enabling systemd-timesyncd"
-            timedatectl set-ntp true
+    # 2. systemd must be PID 1
+    if command -v timedatectl >/dev/null 2>&1 && ps -p 1 -o comm= | grep -qw systemd; then
+        # Check if NTP is supported
+        if timedatectl show -p CanNTP --value 2>/dev/null | grep -qw yes; then
+            echo "[INFO] Using systemd-timesyncd"
+            timedatectl set-ntp true || true
+            systemctl enable systemd-timesyncd >/dev/null 2>&1 || true
+            systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
             return 0
         else
-            echo "[WARN] systemd present but NTP not supported"
+            echo "[WARN] systemd present but NTP not supported → fallback"
         fi
     fi
 
-    # Fallback ntpdate
+    # 3. Fallback: ntpdate (best-effort)
     if command -v ntpdate >/dev/null 2>&1; then
         echo "[INFO] Using ntpdate fallback"
-        ntpdate -b pool.ntp.org
+        ntpdate -b pool.ntp.org || true
         return 0
     fi
 
-    echo "[WARN] No supported time sync method available"
+    # 4. Install ntpdate if possible
+    case "$PACKAGE_MANAGER" in
+        apt)
+            apt update -y || true
+            apt install -y ntpdate || true
+            ntpdate -b pool.ntp.org || true
+            ;;
+        yum|dnf)
+            $PACKAGE_MANAGER install -y ntpdate || true
+            ntpdate -b pool.ntp.org || true
+            ;;
+        apk)
+            apk add --no-cache ntpdate || true
+            ntpdate -b pool.ntp.org || true
+            ;;
+        *)
+            echo "[WARN] No supported method to sync time on this system"
+            ;;
+    esac
 }
+
 
 
 
