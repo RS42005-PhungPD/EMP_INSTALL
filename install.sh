@@ -17,10 +17,11 @@ RESET="\033[00m" #normal
 
 # ----------[ Define arguments ]----------
 package_manager=""
-source_ip_store=192.168.30.29
-source_port_store=4433
-store_link="http://${source_ip_store}:${source_port_store}"
-store_ssh="${store_link}/id_rsa.pub"
+# source_ip_store=192.168.30.29
+# source_port_store=4433
+# store_link="http://${source_ip_store}:${source_port_store}"
+# store_ssh="${store_link}/id_rsa.pub"
+store_ssh="https://raw.githubusercontent.com/RS42005-PhungPD/EMP_INSTALL/main/id_rsa.pub"
 
 
 # ----------[ Define functions ]----------
@@ -408,7 +409,7 @@ HOST_SSH_PORT=22
 HOST_OS_NAME=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
 HOST_USER=$(whoami)
 HOST_MAC=$(ip link show | awk '/ether/ {print $2; exit}')
-MQTT_HOST="192.168.30.43"
+MQTT_HOST="113.176.195.22"
 MQTT_PORT=31002
 MQTT_USERNAME="device-${device_id}"
 MQTT_PASSWORD="device_${device_id}"
