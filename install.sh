@@ -46,12 +46,52 @@ systemd_works() {
 }
 
 
-syn_time() {
-    if [[ "$PACKAGE_MANAGER" == "apt" ]]; then
-        $PACKAGE_MANAGER install -y systemd-timesyncd
-        systemctl enable --now systemd-timesyncd
+sync_time() {
+    echo "[INFO] Syncing system time..."
+
+    # Detect container
+    if grep -qaE 'docker|containerd|kubepods' /proc/1/cgroup 2>/dev/null; then
+        echo "[INFO] Running inside container → skip time sync (use host time)"
+        return 0
     fi
+
+    # systemd-based system
+    if command -v timedatectl >/dev/null 2>&1; then
+        echo "[INFO] Using systemd-timesyncd"
+        timedatectl set-ntp true
+        systemctl enable systemd-timesyncd >/dev/null 2>&1 || true
+        systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    # Fallback: ntpdate (non-systemd)
+    if command -v ntpdate >/dev/null 2>&1; then
+        echo "[INFO] Using ntpdate"
+        ntpdate pool.ntp.org
+        return 0
+    fi
+
+    # Install ntpdate if possible
+    case "$PACKAGE_MANAGER" in
+        apt)
+            apt update -y
+            apt install -y ntpdate
+            ntpdate pool.ntp.org
+            ;;
+        yum|dnf)
+            $PACKAGE_MANAGER install -y ntpdate
+            ntpdate pool.ntp.org
+            ;;
+        apk)
+            apk add --no-cache ntpdate
+            ntpdate pool.ntp.org
+            ;;
+        *)
+            echo "[WARN] No supported package manager for time sync"
+            ;;
+    esac
 }
+
 
 
 install_ssh() {
