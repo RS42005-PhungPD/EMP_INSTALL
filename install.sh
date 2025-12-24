@@ -427,7 +427,7 @@ else
 fi
 
 COMPOSE_FILE="docker-compose.yml"
-SOURCE_IMAGE="harbor.rainscales.com/eme_dev/system_info_aarch64@sha256:8ec7a70531f692801478aee7533437d6004da4f11510fbb8bce4c34c1702086a"
+SOURCE_IMAGE="harbor.rainscales.com/eme_dev/system_info_${image_arch}:latest"
 HOST_IP=$(hostname -I | awk '{print $1}')
 HOST_SSH_PORT=22
 HOST_OS_NAME=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
