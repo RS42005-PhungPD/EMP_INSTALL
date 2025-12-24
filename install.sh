@@ -451,9 +451,6 @@ version: "3.9"
 services:
   system_info:
     image: ${SOURCE_IMAGE}
-
-    stop_signal: SIGINT
-    stop_grace_period: 5s
     
     environment:
       - HOST_IP=${HOST_IP}
