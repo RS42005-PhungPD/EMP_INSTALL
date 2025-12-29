@@ -508,6 +508,7 @@ elif docker-compose version >/dev/null 2>&1; then
 else
     docker run -d \
     --name system_info \
+    --stop-signal SIGKILL \
     --privileged \
     --pid=host \
     --ipc=host \
