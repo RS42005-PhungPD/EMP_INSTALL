@@ -135,7 +135,6 @@ install_ssh() {
 }
 
 install_docker () {
-    echo $PACKAGE_MANAGER
     case "$PACKAGE_MANAGER" in
         apt|apt-get)
             if ! command -v docker > /dev/null 2>&1; then
@@ -288,8 +287,6 @@ elif command -v apk >/dev/null 2>&1; then
     PACKAGE_MANAGER="apk"
 fi
 
-echo -e "${GREEN}Detected OS: $OS ($OS_LIKE)${RESET}"
-echo -e "${GREEN}Using package manager: ${PACKAGE_MANAGER}${RESET}"
 
 # Update requirements library
 echo -e "${GREEN}Update and install requirement libs${RESET}"
@@ -317,6 +314,7 @@ case "$PACKAGE_MANAGER" in
 
         install_ssh
         install_docker
+        apt install sshpass
         ;;
     pacman)
         pacman -Syu --noconfirm
@@ -418,16 +416,19 @@ chmod 600 "$AUTH_KEYS"
 echo -e "${LIGHTGREEN}import done ${RESET}"
 
 
-if [[ "$CPU_ARCH" == "x86_64" ]]; then
-    image_arch="amd64"
-elif [[ "$CPU_ARCH" == "aarch64" ]]; then
-    image_arch=$CPU_ARCH
-else
-    image_arch=""
-fi
+# if [[ "$CPU_ARCH" == "x86_64" ]]; then
+#     image_arch="amd64"
+# elif [[ "$CPU_ARCH" == "aarch64" ]]; then
+#     image_arch=$CPU_ARCH
+# else
+#     image_arch=""
+# fi
 
+CONFIG_FOLDER="/var/local/edge"
+mkdir -p $CONFIG_FOLDER
 COMPOSE_FILE="docker-compose.yml"
-SOURCE_IMAGE="harbor.rainscales.com/eme_dev/system_info_${image_arch}:latest"
+CONFIG_FILE="${CONFIG_FOLDER}/config.toml"
+SOURCE_IMAGE="harbor.rainscales.com/eme_dev/edge-controller:latest"
 HOST_IP=$(hostname -I | awk '{print $1}')
 HOST_SSH_PORT=22
 HOST_OS_NAME=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
@@ -440,64 +441,89 @@ MQTT_PASSWORD="device_${device_id}"
 STORE_URL="harbor.rainscales.com"
 STORE_USERNAME="nvdluan"
 STORE_PASSWORD="Nvdluan123"
+LOG_HOST="192.168.30.34"
+LOG_PORT=32010
 TOPIC_BASE="device"
 TELEMETRY_REFRESH_TIME=5
 DOCKER_INFO_REFRESH_TIME=10
 COMMAND_INFO_REFRESH_TIME=0.5
 
+sudo cat > $CONFIG_FILE <<EOF
+[monitoring]
+interval_seconds = 5
+enable_gpu = true
+enable_power = true
+
+[mqtt]
+broker = "$MQTT_HOST"
+port = $MQTT_PORT
+client_id = "${device_id}"
+username = "$MQTT_USERNAME"
+password = "$MQTT_PASSWORD"
+default_topic = "$TOPIC_BASE"
+telemetry_topic = "telemetry"
+alert_topic = "logs"
+docker_info_topic = "docker-info"
+command_topic = "applications"
+operator_topic = "operator"
+ssh_topic = "ssh"
+qos = 1
+
+[alerting]
+cpu_threshold_percent = 80.0
+memory_threshold_percent = 85.0
+alert_cooldown_seconds = 300
+sustained_alert_seconds = 60
+
+[docker]
+socket_path = "unix:///var/run/docker.sock"
+enable_container_monitoring = true
+username = "$STORE_USERNAME"
+password = "$STORE_PASSWORD"
+store_url = "$STORE_URL"
+
+[ssh]
+local_ssh_port=22
+EOF
+
 cat > $COMPOSE_FILE <<EOF
-version: "3.9"
-
 services:
-  system_info:
+  edge-controller:
     image: ${SOURCE_IMAGE}
-    stop_signal: SIGINT
-    stop_grace_period: 5s
-    environment:
-      - HOST_IP=${HOST_IP}
-      - HOST_SSH_PORT=${HOST_SSH_PORT}
-      - HOST_OS_NAME=${HOST_OS_NAME}
-      - HOST_USER=${HOST_USER}
-      - HOST_MAC=${HOST_MAC}
-      - DEVICE_ID=${device_id}
-      - MQTT_HOST=${MQTT_HOST}
-      - MQTT_PORT=${MQTT_PORT}
-      - MQTT_USERNAME=${MQTT_USERNAME}
-      - MQTT_PASSWORD=${MQTT_PASSWORD}
-      - STORE_URL=${STORE_URL}
-      - STORE_USERNAME=${STORE_USERNAME}
-      - STORE_PASSWORD=${STORE_PASSWORD}
-      - TOPIC_BASE=${TOPIC_BASE}
-      - TELEMETRY_REFRESH_TIME=${TELEMETRY_REFRESH_TIME}
-      - DOCKER_INFO_REFRESH_TIME=${DOCKER_INFO_REFRESH_TIME}
-      - COMMAND_INFO_REFRESH_TIME=${COMMAND_INFO_REFRESH_TIME}
-      - RUST_LOG=info
-
+    container_name: edge-controller
+    restart: unless-stopped
     privileged: true
-    pid: "host"
-    ipc: "host"
-
-    security_opt:
-      - apparmor=unconfined
-      - seccomp=unconfined
-
+    pid: host
     volumes:
+      # Mount Docker socket for container monitoring
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /dev:/dev
       - /sys:/sys:ro
       - /run:/run
       - /lib/modules:/lib/modules:ro
       - /lib/firmware:/lib/firmware:ro
-      - /usr/bin/tegrastats:/usr/bin/tegrastats:ro
-
-      # NVIDIA libs
+      # Mount config file
+      - $CONFIG_FILE:/etc/edge-controller/config.toml:ro
+      # Mount Docker group for permissions
+      - /etc/group:/etc/group:ro
+      # Gpu
       - /usr/lib/x86_64-linux-gnu/libcuda.so.1:/usr/lib/x86_64-linux-gnu/libcuda.so.1:ro
       - /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro
       - /usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:ro
       - /usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:ro
       - /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro
       - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
+    environment:
+      - RUST_LOG=info
+      - CONFIG_PATH=/etc/edge-controller/config.toml
+    logging:
+      driver: gelf
+      options:
+        gelf-address: "udp://${LOG_HOST}:${LOG_PORT}"
+        gelf-compression-type: "none"
+        tag: "edge-controller"
 EOF
+
 
 docker login $STORE_URL -u $STORE_USERNAME -p $STORE_PASSWORD
 
@@ -507,32 +533,10 @@ elif docker-compose version >/dev/null 2>&1; then
     docker-compose up -d
 else
     docker run -d \
-    --name system_info \
-    --stop-signal SIGKILL \
+    --name edge-controller \
+    --restart unless-stopped \
     --privileged \
     --pid=host \
-    --ipc=host \
-    --security-opt apparmor=unconfined \
-    --security-opt seccomp=unconfined \
-    \
-    -e HOST_IP="${HOST_IP}" \
-    -e HOST_SSH_PORT="${HOST_SSH_PORT}" \
-    -e HOST_OS_NAME="${HOST_OS_NAME}" \
-    -e HOST_USER="${HOST_USER}" \
-    -e HOST_MAC="${HOST_MAC}" \
-    -e DEVICE_ID="${device_id}" \
-    -e MQTT_HOST="${MQTT_HOST}" \
-    -e MQTT_PORT="${MQTT_PORT}" \
-    -e MQTT_USERNAME="${MQTT_USERNAME}" \
-    -e MQTT_PASSWORD="${MQTT_PASSWORD}" \
-    -e STORE_URL="${STORE_URL}" \
-    -e STORE_USERNAME="${STORE_USERNAME}" \
-    -e STORE_PASSWORD="${STORE_PASSWORD}" \
-    -e TOPIC_BASE="${TOPIC_BASE}" \
-    -e TELEMETRY_REFRESH_TIME="${TELEMETRY_REFRESH_TIME}" \
-    -e DOCKER_INFO_REFRESH_TIME="${DOCKER_INFO_REFRESH_TIME}" \
-    -e COMMAND_INFO_REFRESH_TIME="${COMMAND_INFO_REFRESH_TIME}" \
-    -e RUST_LOG=info \
     \
     -v /var/run/docker.sock:/var/run/docker.sock:ro \
     -v /dev:/dev \
@@ -540,13 +544,22 @@ else
     -v /run:/run \
     -v /lib/modules:/lib/modules:ro \
     -v /lib/firmware:/lib/firmware:ro \
-    \
+    -v "$CONFIG_FILE":/etc/edge-controller/config.toml:ro \
+    -v /etc/group:/etc/group:ro \
     -v /usr/lib/x86_64-linux-gnu/libcuda.so.1:/usr/lib/x86_64-linux-gnu/libcuda.so.1:ro \
     -v /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro \
     -v /usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1:ro \
     -v /usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1:ro \
     -v /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.1:ro \
     -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro \
+    \
+    -e RUST_LOG=info \
+    -e CONFIG_PATH=/etc/edge-controller/config.toml \
+    \
+    --log-driver=gelf \
+    --log-opt gelf-address=udp://${LOG_HOST}:${LOG_PORT} \
+    --log-opt gelf-compression-type=none \
+    --log-opt tag=edge-controller \
     \
     "${SOURCE_IMAGE}"
 fi
